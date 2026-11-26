@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Somodoro</title>
+<style>
+:root{--ice:#9fe8ff;--accent:#9fe8ff;--text:#eaf8ff;--dim:#8fb2c4}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(ellipse at 20% 10%,#14204a 0,transparent 55%),radial-gradient(ellipse at 85% 90%,#2a1650 0,transparent 55%),#04060f;
+  color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center;align-items:center;
+  padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));overflow:hidden}
+#sky{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+main{position:relative;z-index:1;width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px;align-items:center}
+h1{margin:0;font-size:1.1rem;letter-spacing:.5em;text-transform:uppercase;font-weight:300;color:var(--ice);text-shadow:0 0 18px var(--ice)}
+.ice{background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(150,220,255,.05) 45%,rgba(255,255,255,.1));
+  border:1px solid rgba(200,240,255,.35);border-radius:28px;backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:0 10px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 30px rgba(159,232,255,.08)}
+.tabs{display:flex;gap:6px;padding:6px;border-radius:999px;width:100%}
+.tabs button{flex:1;border:0;background:none;color:var(--dim);padding:10px 4px;border-radius:999px;font:inherit;font-size:.85rem;cursor:pointer;transition:.25s}
+.tabs button.on{background:rgba(159,232,255,.2);color:var(--text);box-shadow:inset 0 0 0 1px rgba(200,240,255,.5),0 0 18px rgba(159,232,255,.25)}
+.dial{position:relative;width:min(80vw,320px);aspect-ratio:1;display:grid;place-items:center;border-radius:50%;padding:0}
+.dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.dial circle{fill:none;stroke-width:6;stroke-linecap:round}
+.dial .bg{stroke:rgba(200,240,255,.12)}
+.dial .fg{stroke:var(--accent);filter:drop-shadow(0 0 6px var(--accent));transition:stroke-dashoffset .4s linear,stroke .4s}
+#time{font-size:clamp(3rem,16vw,4.4rem);font-weight:200;font-variant-numeric:tabular-nums;letter-spacing:.02em;text-shadow:0 0 24px rgba(159,232,255,.6)}
+#label{color:var(--dim);font-size:.9rem;letter-spacing:.2em;text-transform:uppercase;margin-top:-4px}
+.row{display:flex;gap:12px;align-items:center}
+.btn{border:1px solid rgba(200,240,255,.4);background:rgba(159,232,255,.14);color:var(--text);font:inherit;border-radius:999px;cursor:pointer;transition:.2s;backdrop-filter:blur(10px)}
+.btn:active{transform:scale(.95)}
+.btn:hover{background:rgba(159,232,255,.26)}
+#go{padding:16px 54px;font-size:1.1rem;letter-spacing:.15em;box-shadow:0 0 28px rgba(159,232,255,.3)}
+.sm{width:50px;height:50px;font-size:1.2rem}
+.dots{display:flex;gap:8px;color:var(--dim);font-size:.85rem;align-items:center}
+.dots i{width:10px;height:10px;border-radius:50%;border:1px solid var(--ice);display:inline-block}
+.dots i.f{background:var(--ice);box-shadow:0 0 10px var(--ice)}
+#set{width:100%;padding:16px 20px;display:none;gap:10px;flex-direction:column}
+#set.open{display:flex}
+#set label{display:flex;justify-content:space-between;align-items:center;font-size:.9rem;color:var(--dim)}
+#set input{width:70px;background:rgba(255,255,255,.08);border:1px solid rgba(200,240,255,.3);border-radius:12px;color:var(--text);padding:8px;font:inherit;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<main>
+  <h1>Somodoro</h1>
+  <div class="tabs ice" id="tabs">
+    <button data-m="focus">Focus</button><button data-m="short">Pause</button><button data-m="long">Longue</button>
+  </div>
+  <div class="dial ice">
+    <svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="46"/><circle class="fg" id="ring" cx="50" cy="50" r="46"/></svg>
+    <div style="text-align:center"><div id="time">25:00</div><div id="label">Focus</div></div>
+  </div>
+  <div class="row">
+    <button class="btn sm" id="reset" title="Réinitialiser" aria-label="Réinitialiser">↺</button>
+    <button class="btn" id="go">START</button>
+    <button class="btn sm" id="cog" title="Réglages" aria-label="Réglages">⚙</button>
+  </div>
+  <div class="dots" id="dots"></div>
+  <div class="ice" id="set">
+    <label>Focus (min)<input type="number" min="1" max="180" data-k="focus"></label>
+    <label>Pause (min)<input type="number" min="1" max="60" data-k="short"></label>
+    <label>Pause longue (min)<input type="number" min="1" max="60" data-k="long"></label>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s), C=2*Math.PI*46;
+const NAMES={focus:'Focus',short:'Pause',long:'Pause longue'}, COLORS={focus:'#9fe8ff',short:'#8dffd0',long:'#c4a6ff'};
+let S={d:{focus:25,short:5,long:15},done:0};
+try{S={...S,...JSON.parse(localStorage.somodoro)}}catch{}
+const save=()=>{try{localStorage.somodoro=JSON.stringify(S)}catch{}};
+let mode='focus', left=S.d.focus*60, end=null, wake=null;
+const total=()=>S.d[mode]*60;
+
+function render(){
+  const m=Math.floor(left/60), s=left%60, t=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  $('#time').textContent=t; $('#label').textContent=NAMES[mode];
+  $('#ring').style.strokeDasharray=C; $('#ring').style.strokeDashoffset=C*(1-left/total());
+  document.documentElement.style.setProperty('--accent',COLORS[mode]);
+  $('#go').textContent=end?'PAUSE':'START';
+  document.title=end?`${t} · Somodoro`:'Somodoro';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+  const n=S.done%4;
+  $('#dots').innerHTML=Array.from({length:4},(_,i)=>`<i class="${i<n?'f':''}"></i>`).join('')+` <span>${S.done} session${S.done>1?'s':''}</span>`;
+}
+function setMode(m){mode=m;left=total();end=null;release();render()}
+async function hold(){try{wake=await navigator.wakeLock?.request('screen')}catch{}}
+function release(){wake?.release().catch(()=>{});wake=null}
+function beep(){ // three soft chimes
+  try{const a=new AudioContext();[0,.35,.7].forEach(d=>{const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;o.connect(g);g.connect(a.destination);
+    g.gain.setValueAtTime(.0001,a.currentTime+d);g.gain.exponentialRampToValueAtTime(.25,a.currentTime+d+.02);g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d+.4);o.start(a.currentTime+d);o.stop(a.currentTime+d+.45)})}catch{}
+}
+function finish(){
+  beep(); navigator.vibrate?.([200,100,200]);
+  if(mode==='focus')S.done++; save();
+  if(window.Notification&&Notification.permission==='granted')new Notification('Somodoro',{body:mode==='focus'?'Session terminée, pause !':'Retour au focus !'});
+  setMode(mode==='focus'?(S.done%4===0?'long':'short'):'focus');
+}
+function tick(){ // based on end timestamp so it survives background throttling
+  if(!end)return;
+  left=Math.max(0,Math.round((end-Date.now())/1000));
+  left?render():finish();
+}
+setInterval(tick,250); document.addEventListener('visibilitychange',()=>{tick();if(end&&!document.hidden)hold()});
+
+$('#go').onclick=()=>{
+  if(end){end=null;release()}else{end=Date.now()+left*1000;hold();if(window.Notification&&Notification.permission==='default')Notification.requestPermission()}
+  render();
+};
+$('#reset').onclick=()=>setMode(mode);
+$('#tabs').onclick=e=>e.target.dataset.m&&setMode(e.target.dataset.m);
+$('#cog').onclick=()=>$('#set').classList.toggle('open');
+document.querySelectorAll('#set input').forEach(i=>{
+  i.value=S.d[i.dataset.k];
+  i.onchange=()=>{const v=Math.min(+i.max,Math.max(1,Math.round(+i.value)||S.d[i.dataset.k]));i.value=v;S.d[i.dataset.k]=v;save();if(!end&&i.dataset.k===mode){left=total()}render()};
+});
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target.tagName!=='INPUT'){e.preventDefault();$('#go').click()}});
+
+// deep-space sky: twinkling, slowly drifting stars
+const cv=$('#sky'),x=cv.getContext('2d');let W,H,stars=[];
+function size(){W=cv.width=innerWidth*devicePixelRatio;H=cv.height=innerHeight*devicePixelRatio;
+  stars=Array.from({length:Math.round(innerWidth*innerHeight/6000)},()=>({x:Math.random()*W,y:Math.random()*H,r:(Math.random()*1.3+.3)*devicePixelRatio,p:Math.random()*6.3,s:Math.random()*.02+.005,ice:Math.random()<.3}))}
+addEventListener('resize',size);size();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+(function draw(){
+  x.clearRect(0,0,W,H);
+  for(const s of stars){s.p+=s.s;if(!reduce)s.y=(s.y+.04*devicePixelRatio)%H;
+    x.globalAlpha=.4+.6*Math.abs(Math.sin(s.p));x.fillStyle=s.ice?'#aee9ff':'#fff';x.beginPath();x.arc(s.x,s.y,s.r,0,6.3);x.fill()}
+  requestAnimationFrame(draw)
+})();
+
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
